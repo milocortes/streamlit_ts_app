@@ -1,0 +1,5 @@
+# Ejecuta programa
+uvx streamlit run streamlit_app/dashboard.py 
+
+# Streamlit prophet
+https://github.com/artefactory/streamlit_prophet/tree/main
