@@ -19,7 +19,7 @@ def get_project_root() -> str:
     return str(Path(__file__).parent.parent.parent)
 
 
-@st.cache(suppress_st_warning=True, ttl=300)
+@st.cache_data()
 def load_dataset(file: str, load_options: Dict[Any, Any]) -> pd.DataFrame:
     """Loads dataset from user's file system as a pandas dataframe.
 
@@ -44,7 +44,7 @@ def load_dataset(file: str, load_options: Dict[Any, Any]) -> pd.DataFrame:
         st.stop()
 
 
-@st.cache(allow_output_mutation=True, ttl=300)
+@st.cache_data()
 def load_config(
     config_streamlit_filename: str, config_instructions_filename: str, config_readme_filename: str
 ) -> Tuple[Dict[Any, Any], Dict[Any, Any], Dict[Any, Any]]:
