@@ -12,10 +12,12 @@ dependencies = [
     "pyqt5==5.15.10",
     "rich>=14.0.0",
     "scikit-learn>=1.7.0",
+    "shap>=0.48.0",
     "stqdm>=0.0.5",
     "streamlit>=1.45.1",
     "toml>=0.10.2",
     "typer>=0.16.0",
+    "xgboost>=3.0.2",
 ]
 
 [dependency-groups]

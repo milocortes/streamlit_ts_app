@@ -1,4 +1,5 @@
 import streamlit as st
+from prophet.utilities import regressor_coefficients
 
 from lib.utils.load import load_config
 from lib.inputs.eval import input_metrics, input_scope_eval
@@ -125,6 +126,15 @@ def main():
             eval = input_scope_eval(eval, use_cv, readme)
             
         st.sidebar.title("4. Forecast")
+        with st.sidebar.expander("Dataset Regressors", expanded=True):
+
+            file_regressors = st.file_uploader("Upload a csv file for regressors", type="csv", help=readme["tooltips"]["dataset_upload"])
+        
+            if file_regressors:
+                future_reg = pd.read_csv(file_regressors)        
+            else:
+                st.stop()
+
         # Scope of evaluation
         with st.sidebar.expander("Horizon", expanded=False):
             horizonte_pronostico = st.selectbox(
@@ -221,8 +231,6 @@ def main():
 
         st.success("Done!")
 
-        
-            
         tuning_results = pd.DataFrame(params)
         tuning_results['mse'] = mses
 
@@ -234,58 +242,105 @@ def main():
 
 
         m = Prophet(**best_params)
-        m.add_country_holidays(country_name='US')
-        m.fit(train)
-
-        future = m.make_future_dataframe(periods=horizonte_pronostico, freq='Q')
+        m.add_country_holidays(country_name='SL')
 
         if regressor_cols:
             for i in regressor_cols:
-                future[i] = df.loc[train_range[0]:,i].reset_index(drop=True)
+                m.add_regressor(i)
+                
+        m.fit(train)
+
+        future = m.make_future_dataframe(periods = test.shape[0] + 1 + horizonte_pronostico, freq='Q')
+
+        future["date"] = pd.PeriodIndex(future["ds"], freq = "Q")
+        future = future.set_index("date")
+
+        all_time_range = pd.PeriodIndex(pd.date_range(start=train_init, end=test_final, freq="QE"), freq = "Q")
+
+        future = pd.concat([future, df.loc[all_time_range, regressor_cols]], axis = 1)
+
+        future_without_reg = future.ffill()
+
+        forecast_without_regs = m.predict(future_without_reg)
+
+        ## Agrega regresores actualizados
+        future_with_reg = future.copy()
+        fechas_sin_dato = future[future.isna().any(axis =1)].ds
+
+        future_reg["date"] = pd.PeriodIndex(future_reg[date_col].str.replace(" ","-"), freq='Q')
+        future_reg["ds"] = pd.PeriodIndex(future_reg[date_col].str.replace(" ","-"), freq='Q').to_timestamp()
+
+        future_reg.set_index("date", inplace = True)
+        
+        #st.dataframe(future_with_reg)
+
+        #st.dataframe(future_reg)
+
+        future_with_reg.loc[future_reg.index,regressor_cols] = future_reg
+
+        future_with_reg = future_with_reg.ffill()
+
+        forecast_with_regs = m.predict(future_with_reg)
+
+        ## Visualicemos desempeño
+        all_dataset = pd.concat([train,test])[["ds", "y"]]
+        all_dataset["yhat"] = all_dataset["y"]
+        all_dataset["yhat_upper"] = all_dataset["y"]
+        all_dataset["yhat_lower"] = all_dataset["y"]
 
 
-        forecast = m.predict(future)
+        ## Prepare forecasts
+        forecast_without_regs["date"] = pd.PeriodIndex(forecast_without_regs["ds"], freq = "Q")
+        forecast_with_regs["date"] = pd.PeriodIndex(forecast_with_regs["ds"], freq = "Q")
 
+        forecast_without_regs.set_index("date", inplace = True)
+        forecast_with_regs.set_index("date", inplace = True)
+
+        #forecast_with_regs.loc[fechas_sin_dato.index]
+
+        ## Concat data
+        all_dataset = pd.concat([all_dataset, forecast_with_regs.loc[fechas_sin_dato.index][["ds", "yhat", "yhat_lower", "yhat_upper"]]])
+
+        #all_dataset[["ds", "yhat", "yhat_lower", "yhat_upper"]] = all_dataset[["ds", "yhat", "yhat_lower", "yhat_upper"]].apply(lambda x : np.exp(x))
 
         import plotly.graph_objects as go
 
         fig = go.Figure()
+
+        fig.add_trace(go.Scatter(
+            name="Pronóstico",
+            x=all_dataset["ds"], 
+            y=all_dataset["yhat"],
+            mode='lines',
+            line_color='red',
+            ))
+
+
+        fig.add_trace(
+            go.Scatter(
+                name = "Serie Observada",
+                x=all_dataset["ds"],
+                y=all_dataset["y"],
+                mode='lines', line_color='darkblue'
+            )
+        )
+
         fig.add_trace(go.Scatter(
             showlegend=False,
-            x=forecast["ds"], 
-            y=forecast["yhat_upper"],
+            x=all_dataset.iloc[-(len(fechas_sin_dato.index)+1):]["ds"], 
+            y=all_dataset.iloc[-(len(fechas_sin_dato.index)+1):]["yhat_upper"],
             fill=None,
             mode='lines',
             line_color='white',
             ))
         fig.add_trace(go.Scatter(
             showlegend=False,
-            x=forecast["ds"],
-            y=forecast["yhat_lower"],
+            x=all_dataset.iloc[-(len(fechas_sin_dato.index)+1):]["ds"],
+            y=all_dataset.iloc[-(len(fechas_sin_dato.index)+1):]["yhat_lower"],
             fill='tonexty', fillcolor='rgba(255, 255, 0, 0.5)', line_color='white',# fill area between trace0 and trace1
             mode='lines'))
 
-        fig.add_trace(go.Scatter(
-            name = "Pronóstico",
-            x=forecast["ds"],
-            y=forecast["yhat"],
-            mode='lines', line_color='darkblue'))
 
-        fig.add_trace(go.Scatter(
-            name = "Datos Entrenamiento",
-            x=train["ds"],
-            y=train["y"],
-            mode='markers', line_color='black'))
-
-        fig.add_trace(go.Scatter(
-            name = "Datos Prueba",
-            x=test["ds"],
-            y=test["y"],
-            mode='markers', line_color='red'))
-
-        fig.update_traces(textposition='top center',
-                            marker={'size': 12, "line" : {"width" : 3, "color" : 'DarkSlateGrey'}}
-                        )
 
         fig.update_layout(
             height=800,
@@ -310,9 +365,11 @@ def main():
                 size=20,
             )
         )
-
         # Plot!
         st.plotly_chart(fig)
+
+        st.dataframe(all_dataset)
+        st.dataframe(regressor_coefficients(m))
 
 if __name__ == "__main__":
     main()
