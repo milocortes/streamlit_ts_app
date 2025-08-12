@@ -15,6 +15,7 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, root_mean_s
 from xgboost import XGBRegressor
 
 from sklearn.model_selection import RandomizedSearchCV
+import matplotlib.pyplot as plt
 
 ### Define rutas
 def build_path(PATH : list) -> str:
@@ -39,7 +40,8 @@ COMPLETOS = datos_dict["completos"]
 
 if COMPLETOS:
     features = ["viirs_bm_sum", "viirs_bm_mean", "viirs_csm_sum", "viirs_csm_mean",  "ndvi_gee", "ndvi_wfp", "evi_gee", "ndbi_gee","temp_air", "temp_ls", "precip", "disaster_occurrence", "disaster_count", "flood_count", "mass_movement_(wet)_count", "drought_count", "storm_count","earthquake_count","volcanic_activity_count", "extreme_temperature_count", 'exports_usd_fob', 'imports_usd_cif', 'remesas_usd_trim',
-        'remesas_usd_trim_g', 'consumo_elect_al_publico',
+        #'remesas_usd_trim_g', 'consumo_elect_al_publico',
+        'consumo_elect_al_publico',
         'consumo_elect_comercio', 'consumo_elect_especiales',
         'consumo_elect_industria', 'consumo_elect_residencial',
         'consumo_elect_total', 'gdp_us_const_trim']
@@ -213,7 +215,8 @@ shap.plots.waterfall(shap_values[-1])
 
 df_shapley_values = pd.DataFrame({"Característica" : X_features_names, "Contribución" : shap_values[-1].values , "Absolutos" : np.abs(shap_values[-1].values)})
 
-df_shapley_values.sort_values("Absolutos", ascending=False).iloc[:10].drop(columns = ["Absolutos"])
+df_contribucion = df_shapley_values.sort_values("Absolutos", ascending=False).iloc[:10].drop(columns = ["Absolutos"])
+df_contribucion
 
 # visualize the first prediction's explanation with a force plot
 shap.plots.force(shap_values[-1])
